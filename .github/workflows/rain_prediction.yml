@@ -51,13 +51,13 @@ jobs:
 
       # Step 1: Get the repository code onto GitHub's machine
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Step 2: Set up Python
       # No extra packages needed — predict_rain.py uses only Python stdlib
       # (csv, json, math, urllib, os, datetime)
       - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
