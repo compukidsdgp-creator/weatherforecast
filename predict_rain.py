@@ -35,14 +35,12 @@ from datetime import datetime
 #  CONFIGURATION — reads from environment variables (GitHub Secrets/Variables)
 # ══════════════════════════════════════════════════════════════════════════════
 
-import re
-TELEGRAM_TOKEN = re.sub(r'[^A-Za-z0-9:_-]', '', os.environ.get("TELEGRAM_BOT_TOKEN", ""))
-print(f"DEBUG: token length = {len(TELEGRAM_TOKEN)}")
-CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
-CITY           = os.environ.get("CITY",               "Mumbai").strip()
-LATITUDE       = float(os.environ.get("LATITUDE",     "19.08").strip())
-LONGITUDE      = float(os.environ.get("LONGITUDE",    "72.88").strip())
-RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD","0.50").strip())
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "")
+CITY           = os.environ.get("CITY",               "Mumbai")
+LATITUDE       = float(os.environ.get("LATITUDE",     "19.08"))
+LONGITUDE      = float(os.environ.get("LONGITUDE",    "72.88"))
+RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD","0.50"))
 DATASET_FILE   = "weather_data.csv"
 
 
@@ -302,29 +300,85 @@ _Automated via GitHub Actions_
 def send_telegram(token, chat_id, message):
     """
     Sends a message using the Telegram Bot API.
-    One POST request — same pattern as previous projects.
+    Includes detailed error output so problems are easy to diagnose.
+
+    404 error usually means:  wrong bot token (check GitHub Secrets)
+    400 error usually means:  wrong chat_id, or Markdown formatting issue
+    401 error usually means:  bot token is invalid or revoked
     """
-    url     = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = json.dumps({
-        "chat_id"    : chat_id,
-        "text"       : message,
-        "parse_mode" : "Markdown",
-    }).encode("utf-8")
 
-    req = urllib.request.Request(
-        url,
-        data    = payload,
-        headers = {"Content-Type": "application/json"},
-        method  = "POST",
-    )
+    # ── Debug: print what we are about to send ────────────────────────────────
+    print(f"    Bot token (first 10 chars) : {token[:10]}...")
+    print(f"    Chat ID                    : {chat_id}")
 
-    with urllib.request.urlopen(req, timeout=10) as response:
-        result = json.loads(response.read())
+    # ── First attempt: send with Markdown formatting ──────────────────────────
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
 
-    if result.get("ok"):
-        print("✅ Telegram message sent successfully!")
-    else:
-        raise Exception(f"Telegram API error: {result}")
+    def _post(text, parse_mode=None):
+        payload_dict = {
+            "chat_id" : str(chat_id).strip(),
+            "text"    : text,
+        }
+        if parse_mode:
+            payload_dict["parse_mode"] = parse_mode
+
+        payload = json.dumps(payload_dict).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data    = payload,
+            headers = {"Content-Type": "application/json"},
+            method  = "POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as response:
+                return json.loads(response.read()), None
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="ignore")
+            return None, f"HTTP {e.code}: {e.reason} — {body}"
+        except Exception as e:
+            return None, str(e)
+
+    # Attempt 1: with Markdown
+    result, error = _post(message, parse_mode="Markdown")
+
+    if result and result.get("ok"):
+        print("✅ Telegram message sent (Markdown mode).")
+        return
+
+    # Attempt 2: Markdown failed — strip formatting and send as plain text
+    print(f"    Markdown send failed: {error}")
+    print("    Retrying as plain text (no formatting)...")
+
+    plain_message = (message
+        .replace("*", "")
+        .replace("_", "")
+        .replace("`", "")
+        .replace("[", "")
+        .replace("]", ""))
+
+    result, error = _post(plain_message, parse_mode=None)
+
+    if result and result.get("ok"):
+        print("✅ Telegram message sent (plain text mode).")
+        return
+
+    # Both attempts failed — print full diagnostic and raise
+    print(f"\n❌ Telegram send failed on both attempts.")
+    print(f"   Last error : {error}")
+    print(f"\n── Diagnosis ──────────────────────────────────────────")
+    print(f"   If error is 404 → Bot token is WRONG or has extra spaces.")
+    print(f"       Check GitHub Secret: TELEGRAM_BOT_TOKEN")
+    print(f"       Token format looks like: 7123456789:AAFxxxxx...")
+    print(f"   If error is 400 → Chat ID is WRONG.")
+    print(f"       Check GitHub Secret: TELEGRAM_CHAT_ID")
+    print(f"       Personal ID is a positive integer.")
+    print(f"       Group ID is a negative integer (e.g. -987654321).")
+    print(f"   If error is 401 → Token is revoked.")
+    print(f"       Go to @BotFather → /revoke → generate a new token.")
+    print(f"───────────────────────────────────────────────────────")
+
+    raise Exception(f"Telegram send failed: {error}")
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -417,6 +471,13 @@ def main():
         print("    Add them as GitHub Secrets to enable Telegram alerts.")
         print("    Message preview printed above.")
         return
+
+    # Validate token format — Telegram tokens look like: 1234567890:AAFxxx...
+    if ":" not in TELEGRAM_TOKEN:
+        print("\n❌ TELEGRAM_BOT_TOKEN looks wrong — it must contain a colon (:)")
+        print("   Correct format:  7123456789:AAFxxxxxxxxxxxxxxxxxxxxx")
+        print("   Check your GitHub Secret for extra spaces or missing characters.")
+        raise Exception("Invalid bot token format")
 
     print("\n[7] Sending Telegram message...")
     send_telegram(TELEGRAM_TOKEN, CHAT_ID, message)
