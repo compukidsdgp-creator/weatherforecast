@@ -1,0 +1,88 @@
+# .github/workflows/rain_prediction.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Daily Rain Prediction — GitHub Actions Workflow
+#
+# WHAT IT DOES:
+#   1. Runs every morning at 7:00 AM IST (1:30 AM UTC)
+#   2. Installs Python (no extra libraries needed — uses only stdlib)
+#   3. Runs predict_rain.py which:
+#        - Trains the model on weather_data.csv
+#        - Fetches live weather from Open-Meteo API
+#        - Predicts rain probability
+#        - Sends the result to Telegram
+#
+# SECRETS REQUIRED (Settings → Secrets → Actions):
+#   TELEGRAM_BOT_TOKEN   — from @BotFather on Telegram
+#   TELEGRAM_CHAT_ID     — your personal or group chat ID
+#
+# VARIABLES (optional — Settings → Variables → Actions):
+#   CITY         — city name to display  (default: Mumbai)
+#   LATITUDE     — city latitude         (default: 19.08)
+#   LONGITUDE    — city longitude        (default: 72.88)
+#   RAIN_THRESHOLD — probability cutoff  (default: 0.50)
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: 🌧️ Daily Rain Prediction → Telegram
+
+# ── WHEN to run ───────────────────────────────────────────────────────────────
+on:
+
+  # Every morning at 7:00 AM IST = 1:30 AM UTC
+  # Cron: minute  hour  day  month  weekday
+  schedule:
+    - cron: "30 1 * * *"
+
+  # Manually trigger from the Actions tab (great for testing in class)
+  workflow_dispatch:
+
+  # Also runs on every push to main (for testing)
+  push:
+    branches:
+      - main
+
+
+# ── WHAT to do ────────────────────────────────────────────────────────────────
+jobs:
+
+  predict-and-alert:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Step 1: Get the repository code onto GitHub's machine
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Python
+      # No extra packages needed — predict_rain.py uses only Python stdlib
+      # (csv, json, math, urllib, os, datetime)
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Step 3: Generate the dataset if it doesn't already exist
+      # In a real project, weather_data.csv is committed to the repo.
+      # This step runs generate_dataset.py as a safety net.
+      - name: 📊 Generate dataset (if not present)
+        run: |
+          if [ ! -f weather_data.csv ]; then
+            echo "weather_data.csv not found — generating..."
+            python generate_dataset.py
+          else
+            echo "weather_data.csv already exists — skipping generation."
+          fi
+
+      # Step 4: Run the rain prediction and send Telegram message
+      - name: 🌧️ Predict rain and send alert
+        run: python predict_rain.py
+        env:
+          # Sensitive values — stored as GitHub Secrets
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+
+          # Non-sensitive config — stored as GitHub Variables
+          CITY:               ${{ vars.CITY }}
+          LATITUDE:           ${{ vars.LATITUDE }}
+          LONGITUDE:          ${{ vars.LONGITUDE }}
+          RAIN_THRESHOLD:     ${{ vars.RAIN_THRESHOLD }}
