@@ -35,7 +35,9 @@ from datetime import datetime
 #  CONFIGURATION — reads from environment variables (GitHub Secrets/Variables)
 # ══════════════════════════════════════════════════════════════════════════════
 
-TELEGRAM_TOKEN = "".join(os.environ.get("TELEGRAM_BOT_TOKEN", "").split())
+import re
+TELEGRAM_TOKEN = re.sub(r'[^A-Za-z0-9:_-]', '', os.environ.get("TELEGRAM_BOT_TOKEN", ""))
+print(f"DEBUG: token length = {len(TELEGRAM_TOKEN)}")
 CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
 CITY           = os.environ.get("CITY",               "Mumbai").strip()
 LATITUDE       = float(os.environ.get("LATITUDE",     "19.08").strip())
