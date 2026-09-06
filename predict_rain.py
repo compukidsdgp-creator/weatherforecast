@@ -35,12 +35,20 @@ from datetime import datetime
 #  CONFIGURATION — reads from environment variables (GitHub Secrets/Variables)
 # ══════════════════════════════════════════════════════════════════════════════
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "")
-CITY           = os.environ.get("CITY",      "").strip() or "Mumbai"
-LATITUDE       = float(os.environ.get("LATITUDE",  "").strip() or "19.08")
-LONGITUDE      = float(os.environ.get("LONGITUDE", "").strip() or "72.88")
-RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD", "").strip() or "0.50")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
+CITY           = os.environ.get("CITY",               "").strip() or "Mumbai"
+LATITUDE       = float(os.environ.get("LATITUDE",     "").strip() or "19.08")
+LONGITUDE      = float(os.environ.get("LONGITUDE",    "").strip() or "72.88")
+RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD","").strip() or "0.50")
+DATASET_FILE   = "weather_data.csv"
+
+# Debug — print resolved config (safe to show, no secrets)
+print(f"  City      : {CITY}")
+print(f"  Latitude  : {LATITUDE}")
+print(f"  Longitude : {LONGITUDE}")
+print(f"  Threshold : {RAIN_THRESHOLD}")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  STEP 1 — LOAD THE DATASET
@@ -389,10 +397,24 @@ def main():
     print(f"  {datetime.now().strftime('%d %b %Y, %I:%M %p')}")
     print("=" * 50)
 
+    # ── Config — resolved here so main() works even if global block differs ───
+    telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id        = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
+    city           = os.environ.get("CITY",               "").strip() or "Mumbai"
+    latitude       = float(os.environ.get("LATITUDE",     "").strip() or "19.08")
+    longitude      = float(os.environ.get("LONGITUDE",    "").strip() or "72.88")
+    rain_threshold = float(os.environ.get("RAIN_THRESHOLD","").strip() or "0.50")
+    dataset_file   = "weather_data.csv"
+
+    print(f"  City      : {city}")
+    print(f"  Latitude  : {latitude}")
+    print(f"  Longitude : {longitude}")
+    print(f"  Threshold : {rain_threshold}")
+
     # ── 1. Load dataset ───────────────────────────────────────────────────────
     print("\n[1] Loading dataset...")
-    X, y = load_dataset(DATASET_FILE)
-    print(f"    Loaded {len(X)} records from {DATASET_FILE}")
+    X, y = load_dataset(dataset_file)
+    print(f"    Loaded {len(X)} records from {dataset_file}")
 
     # ── 2. Split into train/test (80/20) ──────────────────────────────────────
     print("\n[2] Splitting dataset (80% train / 20% test)...")
@@ -428,8 +450,8 @@ def main():
     print(f"    Testing  accuracy : {test_acc:.2%}")
 
     # ── 5. Fetch live weather ─────────────────────────────────────────────────
-    print(f"\n[5] Fetching live weather for {CITY}...")
-    weather = fetch_weather(LATITUDE, LONGITUDE, CITY)
+    print(f"\n[5] Fetching live weather for {city}...")
+    weather = fetch_weather(latitude, longitude, city)
 
     # ── 6. Normalise live input using same min/max ────────────────────────────
     live_input = [
@@ -447,38 +469,38 @@ def main():
     # ── 7. Predict ────────────────────────────────────────────────────────────
     print("\n[6] Predicting rain probability...")
     rain_prob  = predict_proba(weights, bias, live_norm)
-    prediction = 1 if rain_prob >= RAIN_THRESHOLD else 0
+    prediction = 1 if rain_prob >= rain_threshold else 0
 
     print(f"    Live input   : temp={live_input[0]}°C  "
           f"humidity={live_input[1]}%  "
           f"wind={live_input[2]}km/h  "
           f"pressure={live_input[3]}hPa")
     print(f"    Rain prob    : {rain_prob:.2%}")
-    print(f"    Threshold    : {RAIN_THRESHOLD:.0%}")
+    print(f"    Threshold    : {rain_threshold:.0%}")
     print(f"    Prediction   : {'🌧️ RAIN' if prediction else '☀️ NO RAIN'}")
 
     # ── 8. Build message ──────────────────────────────────────────────────────
-    message = build_message(CITY, weather, rain_prob, prediction, RAIN_THRESHOLD)
+    message = build_message(city, weather, rain_prob, prediction, rain_threshold)
     print("\n--- MESSAGE PREVIEW ---")
     print(message)
     print("-" * 50)
 
     # ── 9. Send to Telegram ───────────────────────────────────────────────────
-    if not TELEGRAM_TOKEN or not CHAT_ID:
+    if not telegram_token or not chat_id:
         print("\n⚠️  TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set.")
         print("    Add them as GitHub Secrets to enable Telegram alerts.")
         print("    Message preview printed above.")
         return
 
     # Validate token format — Telegram tokens look like: 1234567890:AAFxxx...
-    if ":" not in TELEGRAM_TOKEN:
+    if ":" not in telegram_token:
         print("\n❌ TELEGRAM_BOT_TOKEN looks wrong — it must contain a colon (:)")
         print("   Correct format:  7123456789:AAFxxxxxxxxxxxxxxxxxxxxx")
         print("   Check your GitHub Secret for extra spaces or missing characters.")
         raise Exception("Invalid bot token format")
 
     print("\n[7] Sending Telegram message...")
-    send_telegram(TELEGRAM_TOKEN, CHAT_ID, message)
+    send_telegram(telegram_token, chat_id, message)
     print("\n✅ Rain prediction complete!")
 
 
