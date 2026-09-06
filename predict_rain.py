@@ -37,10 +37,10 @@ from datetime import datetime
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "")
-CITY           = os.environ.get("CITY",               "Mumbai")
-LATITUDE       = float(os.environ.get("LATITUDE",     "19.08"))
-LONGITUDE      = float(os.environ.get("LONGITUDE",    "72.88"))
-RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD","0.50"))
+CITY           = os.environ.get("CITY",               "")
+LATITUDE       = float(os.environ.get("LATITUDE",     ""))
+LONGITUDE      = float(os.environ.get("LONGITUDE",    ""))
+RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD",""))
 DATASET_FILE   = "weather_data.csv"
 
 
