@@ -35,13 +35,12 @@ from datetime import datetime
 #  CONFIGURATION — reads from environment variables (GitHub Secrets/Variables)
 # ══════════════════════════════════════════════════════════════════════════════
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "")
-CITY           = os.environ.get("CITY",               "")
-LATITUDE       = float(os.environ.get("LATITUDE",     ""))
-LONGITUDE      = float(os.environ.get("LONGITUDE",    ""))
-RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD",""))
-DATASET_FILE   = "weather_data.csv"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
+CITY           = os.environ.get("CITY",               "Mumbai").strip()
+LATITUDE       = float(os.environ.get("LATITUDE",     "19.08").strip())
+LONGITUDE      = float(os.environ.get("LONGITUDE",    "72.88").strip())
+RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD","0.50").strip())
 
 
 # ══════════════════════════════════════════════════════════════════════════════
