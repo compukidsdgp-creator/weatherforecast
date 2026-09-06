@@ -388,7 +388,7 @@ def main():
     # ── Config — resolved here so main() works even if global block differs ───
     telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id        = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
-    city           = os.environ.get("CITY",               "").strip() or "Mumbai"
+    city           = os.environ.get("CITY",               "").strip() or "Kolkata"
     latitude       = float(os.environ.get("LATITUDE",     "").strip() or "19.08")
     longitude      = float(os.environ.get("LONGITUDE",    "").strip() or "72.88")
     rain_threshold = float(os.environ.get("RAIN_THRESHOLD","").strip() or "0.50")
