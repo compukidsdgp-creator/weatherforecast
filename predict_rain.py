@@ -37,12 +37,11 @@ from datetime import datetime
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "")
-CITY           = os.environ.get("CITY",               "")
-LATITUDE       = float(os.environ.get("LATITUDE",     ""))
-LONGITUDE      = float(os.environ.get("LONGITUDE",    ""))
-RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD",""))
-DATASET_FILE   = "weather_data.csv"
-
+# Correct way — handles both missing AND empty string
+CITY      = os.environ.get("CITY",      "").strip() or "Mumbai"
+LATITUDE  = float(os.environ.get("LATITUDE",  "").strip() or "19.08")
+LONGITUDE = float(os.environ.get("LONGITUDE", "").strip() or "72.88")
+RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD", "").strip() or "0.50")
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  STEP 1 — LOAD THE DATASET
