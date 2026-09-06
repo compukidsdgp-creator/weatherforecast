@@ -37,10 +37,9 @@ from datetime import datetime
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "")
-# Correct way — handles both missing AND empty string
-CITY      = os.environ.get("CITY",      "").strip() or "Mumbai"
-LATITUDE  = float(os.environ.get("LATITUDE",  "").strip() or "19.08")
-LONGITUDE = float(os.environ.get("LONGITUDE", "").strip() or "72.88")
+CITY           = os.environ.get("CITY",      "").strip() or "Mumbai"
+LATITUDE       = float(os.environ.get("LATITUDE",  "").strip() or "19.08")
+LONGITUDE      = float(os.environ.get("LONGITUDE", "").strip() or "72.88")
 RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD", "").strip() or "0.50")
 
 # ══════════════════════════════════════════════════════════════════════════════
