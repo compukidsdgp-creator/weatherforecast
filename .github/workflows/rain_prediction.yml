@@ -11,17 +11,16 @@
 #        - Predicts rain probability
 #        - Sends the result to Telegram
 #
-# SECRETS REQUIRED (Settings → Secrets → Actions):
+# SECRETS REQUIRED (Settings → Secrets and variables → Actions → Secrets):
 #   TELEGRAM_BOT_TOKEN   — from @BotFather on Telegram
 #   TELEGRAM_CHAT_ID     — your personal or group chat ID
 #
-# VARIABLES (optional — Settings → Variables → Actions):
-#   CITY         — city name to display  (default: Mumbai)
-#   LATITUDE     — city latitude         (default: 19.08)
-#   LONGITUDE    — city longitude        (default: 72.88)
-#   RAIN_THRESHOLD — probability cutoff  (default: 0.50)
+# VARIABLES (optional — Settings → Secrets and variables → Actions → Variables):
+#   CITY           — city name to display  (default: Mumbai)
+#   LATITUDE       — city latitude         (default: 19.08)
+#   LONGITUDE      — city longitude        (default: 72.88)
+#   RAIN_THRESHOLD — probability cutoff    (default: 0.50)
 # ─────────────────────────────────────────────────────────────────────────────
-
 
 name: 🌧️ Daily Rain Prediction → Telegram
 
@@ -29,7 +28,6 @@ name: 🌧️ Daily Rain Prediction → Telegram
 on:
 
   # Every morning at 7:00 AM IST = 1:30 AM UTC
-  # Cron: minute  hour  day  month  weekday
   schedule:
     - cron: "30 1 * * *"
 
@@ -55,16 +53,12 @@ jobs:
         uses: actions/checkout@v5
 
       # Step 2: Set up Python
-      # No extra packages needed — predict_rain.py uses only Python stdlib
-      # (csv, json, math, urllib, os, datetime)
       - name: 🐍 Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       # Step 3: Generate the dataset if it doesn't already exist
-      # In a real project, weather_data.csv is committed to the repo.
-      # This step runs generate_dataset.py as a safety net.
       - name: 📊 Generate dataset (if not present)
         run: |
           if [ ! -f weather_data.csv ]; then
@@ -82,8 +76,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
 
-          # Non-sensitive config — stored as GitHub Variables
-          CITY:               ${{ vars.CITY }}
-          LATITUDE:           ${{ vars.LATITUDE }}
-          LONGITUDE:          ${{ vars.LONGITUDE }}
-          RAIN_THRESHOLD:     ${{ vars.RAIN_THRESHOLD }}
+          # Non-sensitive config — stored as GitHub Variables, with safe fallbacks
+          CITY:               ${{ vars.CITY || 'Mumbai' }}
+          LATITUDE:           ${{ vars.LATITUDE || '19.08' }}
+          LONGITUDE:          ${{ vars.LONGITUDE || '72.88' }}
+          RAIN_THRESHOLD:     ${{ vars.RAIN_THRESHOLD || '0.50' }}
