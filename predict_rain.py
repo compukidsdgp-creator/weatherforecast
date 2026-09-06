@@ -41,6 +41,7 @@ CITY           = os.environ.get("CITY",               "Mumbai").strip()
 LATITUDE       = float(os.environ.get("LATITUDE",     "19.08").strip())
 LONGITUDE      = float(os.environ.get("LONGITUDE",    "72.88").strip())
 RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD","0.50").strip())
+DATASET_FILE   = "weather_data.csv"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
