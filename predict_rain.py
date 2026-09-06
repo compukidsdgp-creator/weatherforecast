@@ -35,19 +35,7 @@ from datetime import datetime
 #  CONFIGURATION — reads from environment variables (GitHub Secrets/Variables)
 # ══════════════════════════════════════════════════════════════════════════════
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-CHAT_ID        = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
-CITY           = os.environ.get("CITY",               "").strip() or "Mumbai"
-LATITUDE       = float(os.environ.get("LATITUDE",     "").strip() or "19.08")
-LONGITUDE      = float(os.environ.get("LONGITUDE",    "").strip() or "72.88")
-RAIN_THRESHOLD = float(os.environ.get("RAIN_THRESHOLD","").strip() or "0.50")
-DATASET_FILE   = "weather_data.csv"
-
-# Debug — print resolved config (safe to show, no secrets)
-print(f"  City      : {CITY}")
-print(f"  Latitude  : {LATITUDE}")
-print(f"  Longitude : {LONGITUDE}")
-print(f"  Threshold : {RAIN_THRESHOLD}")
+DATASET_FILE = "weather_data.csv"   # only constant safe to set at module level
 
 
 # ══════════════════════════════════════════════════════════════════════════════
