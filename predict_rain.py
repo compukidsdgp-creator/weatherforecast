@@ -1,496 +1,208 @@
 # predict_rain.py
-# ─────────────────────────────────────────────────────────────────────────────
-# Rain Prediction System — Brainiac Institute
+# ============================================================
+#  Simple Rain Predictor
+#  Brainiac Institute
 #
-# What this script does:
-#   1. Loads the synthetic historical weather dataset (weather_data.csv)
-#   2. Trains a Logistic Regression model to predict rain
-#   3. Fetches TODAY's live weather from Open-Meteo API (free, no API key)
-#   4. Uses the trained model to predict whether it will rain today
-#   5. Sends a Telegram message with the prediction and weather details
-#
-# Required GitHub Secrets:
-#   TELEGRAM_BOT_TOKEN  — your bot token from @BotFather
-#   TELEGRAM_CHAT_ID    — your chat or group ID
-#
-# Optional GitHub Variables:
-#   CITY         — city name for display (default: Mumbai)
-#   LATITUDE     — city latitude  (default: 19.08 = Mumbai)
-#   LONGITUDE    — city longitude (default: 72.88 = Mumbai)
-#   RAIN_THRESHOLD — probability threshold to trigger alert (default: 0.5)
-#
-# To run locally for testing (prints prediction, skips Telegram if no token):
-#   python predict_rain.py
-# ─────────────────────────────────────────────────────────────────────────────
+#  What this script does — in order:
+#  1. Create a small weather dataset
+#  2. Train a model using sklearn
+#  3. Fetch today's live weather
+#  4. Predict: Rain or No Rain
+#  5. Send result to Telegram
+# ============================================================
 
 import os
-import csv
 import json
-import math
 import urllib.request
+import urllib.error
 from datetime import datetime
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  CONFIGURATION — reads from environment variables (GitHub Secrets/Variables)
-# ══════════════════════════════════════════════════════════════════════════════
-
-DATASET_FILE = "weather_data.csv"   # only constant safe to set at module level
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 1 — LOAD THE DATASET
-#  Reads weather_data.csv into a list of dictionaries
-# ══════════════════════════════════════════════════════════════════════════════
+# ------------------------------------------------------------
+# STEP 1 — TRAINING DATA
+# Past weather observations with known outcomes.
+# Each row: [Temperature, Humidity, Wind Speed, Pressure]
+# Label   :  1 = Rained    0 = Did not rain
+# ------------------------------------------------------------
 
-def load_dataset(filepath):
-    """
-    Loads the CSV dataset into a list of dicts.
-    Converts all numeric columns to float.
-    Returns X (features) and y (labels) as separate lists.
-    """
-    X = []   # features: [[temp, humidity, wind, pressure], ...]
-    y = []   # labels:   [0, 1, 1, 0, ...]
+X = [
+    # temp  humid  wind  pressure
+    [ 35,    40,    5,   1015 ],   # hot, dry       → no rain
+    [ 28,    85,   20,    998 ],   # humid, windy   → rain
+    [ 32,    60,   10,   1010 ],   # moderate       → no rain
+    [ 24,    90,   25,    995 ],   # very humid     → rain
+    [ 38,    30,    8,   1018 ],   # very hot, dry  → no rain
+    [ 26,    88,   30,    993 ],   # stormy         → rain
+    [ 31,    55,   12,   1008 ],   # warm           → no rain
+    [ 22,    92,   18,    997 ],   # cool, humid    → rain
+    [ 36,    45,    6,   1016 ],   # hot            → no rain
+    [ 27,    80,   22,   1000 ],   # humid          → rain
+    [ 33,    50,    9,   1012 ],   # warm, dry      → no rain
+    [ 25,    87,   28,    994 ],   # humid, windy   → rain
+    [ 34,    42,    7,   1014 ],   # hot, dry       → no rain
+    [ 23,    91,   24,    996 ],   # cool, humid    → rain
+    [ 30,    58,   11,   1009 ],   # moderate       → no rain
+    [ 29,    82,   19,    999 ],   # humid          → rain
+    [ 37,    35,    5,   1017 ],   # very hot, dry  → no rain
+    [ 21,    93,   27,    992 ],   # cool, rainy    → rain
+    [ 32,    48,    8,   1013 ],   # warm           → no rain
+    [ 26,    84,   21,   1001 ],   # humid          → rain
+]
 
-    with open(filepath, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            X.append([
-                float(row["temperature"]),
-                float(row["humidity"]),
-                float(row["wind_speed"]),
-                float(row["pressure"]),
-            ])
-            y.append(int(row["rain"]))
-
-    return X, y
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 2 — LOGISTIC REGRESSION (from scratch — no sklearn)
-#  We implement Logistic Regression manually so students can see
-#  exactly how it works: sigmoid function + gradient descent.
-# ══════════════════════════════════════════════════════════════════════════════
-
-def normalize(X):
-    """
-    Normalises features to range [0, 1] using Min-Max scaling.
-    Returns normalised X, and the min/max values for each feature
-    (needed to normalise new input data the same way).
-    """
-    n_features = len(X[0])
-    mins  = [min(row[j] for row in X) for j in range(n_features)]
-    maxs  = [max(row[j] for row in X) for j in range(n_features)]
-
-    X_norm = []
-    for row in X:
-        norm_row = []
-        for j in range(n_features):
-            rng = maxs[j] - mins[j]
-            val = (row[j] - mins[j]) / rng if rng != 0 else 0
-            norm_row.append(val)
-        X_norm.append(norm_row)
-
-    return X_norm, mins, maxs
+y = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
+     0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
 
 
-def sigmoid(z):
-    """Sigmoid function: converts any number to a probability (0 to 1)."""
-    return 1 / (1 + math.exp(-max(-500, min(500, z))))
+# ------------------------------------------------------------
+# STEP 2 — TRAIN THE MODEL
+# Split data → train model → check accuracy
+# ------------------------------------------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size    = 0.2,
+    random_state = 42
+)
+
+model = RandomForestClassifier(n_estimators=10, random_state=42)
+model.fit(X_train, y_train)
+
+accuracy = accuracy_score(y_test, model.predict(X_test))
+print(f"[1] Model trained   — Accuracy: {accuracy:.0%}")
 
 
-def dot(weights, row):
-    """Dot product: weights · features."""
-    return sum(w * x for w, x in zip(weights, row))
+# ------------------------------------------------------------
+# STEP 3 — FETCH TODAY'S LIVE WEATHER
+# Open-Meteo API: completely free, no API key needed.
+# Change CITY / LATITUDE / LONGITUDE via GitHub Variables.
+# ------------------------------------------------------------
 
+CITY      = os.environ.get("CITY",      "").strip() or "Mumbai"
+LATITUDE  = os.environ.get("LATITUDE",  "").strip() or "19.08"
+LONGITUDE = os.environ.get("LONGITUDE", "").strip() or "72.88"
 
-def train_logistic_regression(X, y, lr=0.1, epochs=200):
-    """
-    Trains Logistic Regression using Gradient Descent.
+url = (
+    f"https://api.open-meteo.com/v1/forecast"
+    f"?latitude={LATITUDE}&longitude={LONGITUDE}"
+    f"&current=temperature_2m,relative_humidity_2m,"
+    f"wind_speed_10m,surface_pressure"
+    f"&timezone=Asia%2FKolkata"
+)
 
-    Parameters:
-        X      — list of feature rows (normalised)
-        y      — list of labels (0 or 1)
-        lr     — learning rate (how big each update step is)
-        epochs — number of training iterations
-
-    Returns:
-        weights — learned weights for each feature
-        bias    — learned bias term
-    """
-    n = len(X)
-    n_features = len(X[0])
-
-    # Start weights and bias at 0
-    weights = [0.0] * n_features
-    bias    = 0.0
-
-    for epoch in range(epochs):
-        # Accumulate gradients
-        dw = [0.0] * n_features
-        db = 0.0
-
-        for i in range(n):
-            # Forward pass: predict probability
-            z     = dot(weights, X[i]) + bias
-            y_hat = sigmoid(z)
-
-            # Error
-            error = y_hat - y[i]
-
-            # Accumulate gradient
-            for j in range(n_features):
-                dw[j] += error * X[i][j]
-            db += error
-
-        # Update weights and bias
-        for j in range(n_features):
-            weights[j] -= lr * dw[j] / n
-        bias -= lr * db / n
-
-    return weights, bias
-
-
-def predict_proba(weights, bias, row):
-    """Returns the probability of rain (0.0 to 1.0) for one row."""
-    z = dot(weights, row) + bias
-    return sigmoid(z)
-
-
-def accuracy(X, y, weights, bias):
-    """Calculates model accuracy on a dataset."""
-    correct = 0
-    for i in range(len(X)):
-        prob = predict_proba(weights, bias, X[i])
-        pred = 1 if prob >= 0.5 else 0
-        if pred == y[i]:
-            correct += 1
-    return correct / len(X)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 3 — FETCH LIVE WEATHER FROM OPEN-METEO API
-#  Free API, no key needed, works from GitHub Actions and any machine.
-#  Docs: https://open-meteo.com/en/docs
-# ══════════════════════════════════════════════════════════════════════════════
-
-def fetch_weather(latitude, longitude, city):
-    """
-    Fetches current weather from Open-Meteo API.
-    Returns a dict with temperature, humidity, wind_speed, pressure.
-    """
-    url = (
-        f"https://api.open-meteo.com/v1/forecast"
-        f"?latitude={latitude}"
-        f"&longitude={longitude}"
-        f"&current=temperature_2m,relative_humidity_2m,"
-        f"wind_speed_10m,surface_pressure,precipitation"
-        f"&timezone=Asia/Kolkata"
-    )
-
-    print(f"Fetching live weather for {city}...")
-    print(f"URL: {url}")
-
-    try:
-        with urllib.request.urlopen(url, timeout=10) as response:
-            data = json.loads(response.read())
-
+try:
+    with urllib.request.urlopen(url, timeout=10) as response:
+        data    = json.loads(response.read())
         current = data["current"]
 
-        weather = {
-            "temperature": round(current["temperature_2m"], 1),
-            "humidity":    round(current["relative_humidity_2m"], 1),
-            "wind_speed":  round(current["wind_speed_10m"], 1),
-            "pressure":    round(current["surface_pressure"], 1),
-            "precipitation": round(current.get("precipitation", 0), 1),
-            "fetched_at":  datetime.now().strftime("%d %b %Y, %I:%M %p"),
-        }
+    temperature = current["temperature_2m"]
+    humidity    = current["relative_humidity_2m"]
+    wind_speed  = current["wind_speed_10m"]
+    pressure    = current["surface_pressure"]
+    print(f"[2] Live weather    — Temp:{temperature}°C  "
+          f"Humidity:{humidity}%  "
+          f"Wind:{wind_speed}km/h  "
+          f"Pressure:{pressure}hPa")
 
-        print(f"Live weather: {weather}")
-        return weather
-
-    except Exception as e:
-        print(f"Warning: Could not fetch live weather — {e}")
-        print("Using fallback test values for demonstration.")
-        # Fallback values for testing (high humidity = should predict rain)
-        return {
-            "temperature": 27.5,
-            "humidity":    85.0,
-            "wind_speed":  22.0,
-            "pressure":    998.5,
-            "precipitation": 0.0,
-            "fetched_at":  datetime.now().strftime("%d %b %Y, %I:%M %p"),
-        }
+except Exception as e:
+    print(f"[2] Weather fetch failed ({e}) — using test values")
+    temperature, humidity, wind_speed, pressure = 27.0, 85.0, 22.0, 998.0
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 4 — BUILD THE TELEGRAM MESSAGE
-# ══════════════════════════════════════════════════════════════════════════════
+# ------------------------------------------------------------
+# STEP 4 — PREDICT RAIN OR NO RAIN
+# ------------------------------------------------------------
 
-def build_message(city, weather, rain_prob, prediction, threshold):
-    """
-    Builds a formatted Telegram message based on prediction result.
-    """
-    today = datetime.now().strftime("%A, %d %B %Y")
-    pct   = round(rain_prob * 100, 1)
+today_weather = [[temperature, humidity, wind_speed, pressure]]
 
-    # Probability bar (visual indicator)
-    filled = int(pct / 10)
-    bar    = "🟦" * filled + "⬜" * (10 - filled)
+prediction  = model.predict(today_weather)[0]
+probability = model.predict_proba(today_weather)[0]
+rain_chance = round(probability[1] * 100, 1)
 
-    if prediction == 1:
-        header  = "🌧️ *RAIN PREDICTED TODAY*"
-        verdict = f"⚠️ There is a *{pct}%* chance of rain in {city} today."
-        advice  = (
-            "☂️ *Recommendations:*\n"
-            "  • Carry an umbrella\n"
-            "  • Avoid outdoor activities if possible\n"
-            "  • Check roads for waterlogging\n"
-            "  • Keep an extra set of clothes handy"
-        )
-    else:
-        header  = "☀️ *CLEAR WEATHER TODAY*"
-        verdict = f"✅ Rain probability is only *{pct}%* in {city} — looks clear!"
-        advice  = (
-            "😊 *Recommendations:*\n"
-            "  • Great day for outdoor activities\n"
-            "  • Light clothing recommended\n"
-            "  • Stay hydrated — it may be warm"
-        )
+if prediction == 1:
+    result = "🌧️ RAIN PREDICTED"
+    advice = "Carry an umbrella. Avoid outdoor plans if possible."
+else:
+    result = "☀️ NO RAIN"
+    advice = "Looks clear! Good day for outdoor activities."
 
-    message = f"""
-{header}
-📍 {city}  |  📅 {today}
-⏰ Data fetched at: {weather['fetched_at']}
-{'─' * 32}
+print(f"[3] Prediction      — {result}  (Rain chance: {rain_chance}%)")
 
-🌡️ Temperature  : {weather['temperature']}°C
-💧 Humidity     : {weather['humidity']}%
-🌬️ Wind Speed   : {weather['wind_speed']} km/h
-🔵 Pressure     : {weather['pressure']} hPa
-🌂 Precipitation: {weather['precipitation']} mm
-{'─' * 32}
 
-📊 *Rain Probability*
-{bar}  {pct}%
-_(Alert threshold: {int(threshold*100)}%)_
+# ------------------------------------------------------------
+# STEP 5 — BUILD THE TELEGRAM MESSAGE
+# ------------------------------------------------------------
 
-{verdict}
+today = datetime.now().strftime("%d %B %Y, %I:%M %p")
 
-{advice}
-{'─' * 32}
-🤖 _Predicted by Logistic Regression_
-_Trained on 500 days of historical data_
-_Automated via GitHub Actions_
+message = f"""
+\U0001f326\ufe0f *DAILY WEATHER REPORT*
+\U0001f4cd {CITY}
+\U0001f4c5 {today}
+{'─' * 28}
+
+\U0001f321\ufe0f Temperature : {temperature}\u00b0C
+\U0001f4a7 Humidity    : {humidity}%
+\U0001f32c\ufe0f Wind Speed  : {wind_speed} km/h
+\U0001f535 Pressure    : {pressure} hPa
+{'─' * 28}
+
+\U0001f4ca Rain Chance : *{rain_chance}%*
+\U0001f52e Prediction  : *{result}*
+
+\U0001f4ac {advice}
+{'─' * 28}
+\U0001f916 _Sent by GitHub Actions_
 """.strip()
 
-    return message
+print("[4] Message built")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-#  STEP 5 — SEND TELEGRAM MESSAGE
-# ══════════════════════════════════════════════════════════════════════════════
+# ------------------------------------------------------------
+# STEP 6 — SEND TO TELEGRAM
+# Reads token and chat ID from GitHub Secrets.
+# ------------------------------------------------------------
 
-def send_telegram(token, chat_id, message):
-    """
-    Sends a message using the Telegram Bot API.
-    Includes detailed error output so problems are easy to diagnose.
+TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
 
-    404 error usually means:  wrong bot token (check GitHub Secrets)
-    400 error usually means:  wrong chat_id, or Markdown formatting issue
-    401 error usually means:  bot token is invalid or revoked
-    """
-
-    # ── Debug: print what we are about to send ────────────────────────────────
-    print(f"    Bot token (first 10 chars) : {token[:10]}...")
-    print(f"    Chat ID                    : {chat_id}")
-
-    # ── First attempt: send with Markdown formatting ──────────────────────────
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-
-    def _post(text, parse_mode=None):
-        payload_dict = {
-            "chat_id" : str(chat_id).strip(),
-            "text"    : text,
-        }
-        if parse_mode:
-            payload_dict["parse_mode"] = parse_mode
-
-        payload = json.dumps(payload_dict).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data    = payload,
-            headers = {"Content-Type": "application/json"},
-            method  = "POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=15) as response:
-                return json.loads(response.read()), None
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="ignore")
-            return None, f"HTTP {e.code}: {e.reason} — {body}"
-        except Exception as e:
-            return None, str(e)
-
-    # Attempt 1: with Markdown
-    result, error = _post(message, parse_mode="Markdown")
-
-    if result and result.get("ok"):
-        print("✅ Telegram message sent (Markdown mode).")
-        return
-
-    # Attempt 2: Markdown failed — strip formatting and send as plain text
-    print(f"    Markdown send failed: {error}")
-    print("    Retrying as plain text (no formatting)...")
-
-    plain_message = (message
-        .replace("*", "")
-        .replace("_", "")
-        .replace("`", "")
-        .replace("[", "")
-        .replace("]", ""))
-
-    result, error = _post(plain_message, parse_mode=None)
-
-    if result and result.get("ok"):
-        print("✅ Telegram message sent (plain text mode).")
-        return
-
-    # Both attempts failed — print full diagnostic and raise
-    print(f"\n❌ Telegram send failed on both attempts.")
-    print(f"   Last error : {error}")
-    print(f"\n── Diagnosis ──────────────────────────────────────────")
-    print(f"   If error is 404 → Bot token is WRONG or has extra spaces.")
-    print(f"       Check GitHub Secret: TELEGRAM_BOT_TOKEN")
-    print(f"       Token format looks like: 7123456789:AAFxxxxx...")
-    print(f"   If error is 400 → Chat ID is WRONG.")
-    print(f"       Check GitHub Secret: TELEGRAM_CHAT_ID")
-    print(f"       Personal ID is a positive integer.")
-    print(f"       Group ID is a negative integer (e.g. -987654321).")
-    print(f"   If error is 401 → Token is revoked.")
-    print(f"       Go to @BotFather → /revoke → generate a new token.")
-    print(f"───────────────────────────────────────────────────────")
-
-    raise Exception(f"Telegram send failed: {error}")
-
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  MAIN — runs everything in order
-# ══════════════════════════════════════════════════════════════════════════════
-
-def main():
-    print("=" * 50)
-    print("  Rain Prediction System — Brainiac Institute")
-    print(f"  {datetime.now().strftime('%d %b %Y, %I:%M %p')}")
-    print("=" * 50)
-
-    # ── Config — resolved here so main() works even if global block differs ───
-    telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-    chat_id        = os.environ.get("TELEGRAM_CHAT_ID",   "").strip()
-    city           = os.environ.get("CITY",               "").strip() or "Kolkata"
-    latitude       = float(os.environ.get("LATITUDE",     "").strip() or "19.08")
-    longitude      = float(os.environ.get("LONGITUDE",    "").strip() or "72.88")
-    rain_threshold = float(os.environ.get("RAIN_THRESHOLD","").strip() or "0.50")
-    dataset_file   = "weather_data.csv"
-
-    print(f"  City      : {city}")
-    print(f"  Latitude  : {latitude}")
-    print(f"  Longitude : {longitude}")
-    print(f"  Threshold : {rain_threshold}")
-
-    # ── 1. Load dataset ───────────────────────────────────────────────────────
-    print("\n[1] Loading dataset...")
-    X, y = load_dataset(dataset_file)
-    print(f"    Loaded {len(X)} records from {dataset_file}")
-
-    # ── 2. Split into train/test (80/20) ──────────────────────────────────────
-    print("\n[2] Splitting dataset (80% train / 20% test)...")
-    split  = int(len(X) * 0.8)
-    X_train, y_train = X[:split], y[:split]
-    X_test,  y_test  = X[split:], y[split:]
-    print(f"    Training samples : {len(X_train)}")
-    print(f"    Testing  samples : {len(X_test)}")
-
-    # ── 3. Normalise features ─────────────────────────────────────────────────
-    print("\n[3] Normalising features (Min-Max scaling)...")
-    X_train_norm, feat_mins, feat_maxs = normalize(X_train)
-
-    # Normalise test set using SAME min/max as training set
-    X_test_norm = []
-    for row in X_test:
-        norm_row = []
-        for j in range(len(row)):
-            rng = feat_maxs[j] - feat_mins[j]
-            val = (row[j] - feat_mins[j]) / rng if rng != 0 else 0
-            norm_row.append(val)
-        X_test_norm.append(norm_row)
-
-    # ── 4. Train model ────────────────────────────────────────────────────────
-    print("\n[4] Training Logistic Regression model...")
-    weights, bias = train_logistic_regression(
-        X_train_norm, y_train, lr=0.1, epochs=300
-    )
-
-    train_acc = accuracy(X_train_norm, y_train, weights, bias)
-    test_acc  = accuracy(X_test_norm,  y_test,  weights, bias)
-    print(f"    Training accuracy : {train_acc:.2%}")
-    print(f"    Testing  accuracy : {test_acc:.2%}")
-
-    # ── 5. Fetch live weather ─────────────────────────────────────────────────
-    print(f"\n[5] Fetching live weather for {city}...")
-    weather = fetch_weather(latitude, longitude, city)
-
-    # ── 6. Normalise live input using same min/max ────────────────────────────
-    live_input = [
-        weather["temperature"],
-        weather["humidity"],
-        weather["wind_speed"],
-        weather["pressure"],
-    ]
-    live_norm = []
-    for j in range(len(live_input)):
-        rng = feat_maxs[j] - feat_mins[j]
-        val = (live_input[j] - feat_mins[j]) / rng if rng != 0 else 0
-        live_norm.append(val)
-
-    # ── 7. Predict ────────────────────────────────────────────────────────────
-    print("\n[6] Predicting rain probability...")
-    rain_prob  = predict_proba(weights, bias, live_norm)
-    prediction = 1 if rain_prob >= rain_threshold else 0
-
-    print(f"    Live input   : temp={live_input[0]}°C  "
-          f"humidity={live_input[1]}%  "
-          f"wind={live_input[2]}km/h  "
-          f"pressure={live_input[3]}hPa")
-    print(f"    Rain prob    : {rain_prob:.2%}")
-    print(f"    Threshold    : {rain_threshold:.0%}")
-    print(f"    Prediction   : {'🌧️ RAIN' if prediction else '☀️ NO RAIN'}")
-
-    # ── 8. Build message ──────────────────────────────────────────────────────
-    message = build_message(city, weather, rain_prob, prediction, rain_threshold)
+if not TOKEN or not CHAT_ID:
+    print("[5] Telegram skipped — no credentials found")
+    print("    Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID as GitHub Secrets")
     print("\n--- MESSAGE PREVIEW ---")
     print(message)
-    print("-" * 50)
 
-    # ── 9. Send to Telegram ───────────────────────────────────────────────────
-    if not telegram_token or not chat_id:
-        print("\n⚠️  TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set.")
-        print("    Add them as GitHub Secrets to enable Telegram alerts.")
-        print("    Message preview printed above.")
-        return
+else:
+    api_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = json.dumps({
+        "chat_id"    : CHAT_ID,
+        "text"       : message,
+        "parse_mode" : "Markdown",
+    }).encode("utf-8")
 
-    # Validate token format — Telegram tokens look like: 1234567890:AAFxxx...
-    if ":" not in telegram_token:
-        print("\n❌ TELEGRAM_BOT_TOKEN looks wrong — it must contain a colon (:)")
-        print("   Correct format:  7123456789:AAFxxxxxxxxxxxxxxxxxxxxx")
-        print("   Check your GitHub Secret for extra spaces or missing characters.")
-        raise Exception("Invalid bot token format")
+    req = urllib.request.Request(
+        api_url,
+        data    = payload,
+        headers = {"Content-Type": "application/json"},
+        method  = "POST"
+    )
 
-    print("\n[7] Sending Telegram message...")
-    send_telegram(telegram_token, chat_id, message)
-    print("\n✅ Rain prediction complete!")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            res = json.loads(resp.read())
+        if res.get("ok"):
+            print("[5] Telegram sent ✅")
+        else:
+            print(f"[5] Telegram error — {res.get('description')}")
 
-
-if __name__ == "__main__":
-    main()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        try:   desc = json.loads(body).get("description", e.reason)
+        except Exception: desc = e.reason
+        print(f"[5] Failed — HTTP {e.code}: {desc}")
+        if e.code == 404: print("    → Token wrong. Check TELEGRAM_BOT_TOKEN.")
+        elif e.code == 400: print("    → Chat ID wrong. Check TELEGRAM_CHAT_ID.")
+        elif e.code == 403: print("    → Use YOUR chat ID, not the bot's ID.")
