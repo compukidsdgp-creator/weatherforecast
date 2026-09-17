@@ -1,83 +1,52 @@
-# .github/workflows/rain_prediction.yml
-# ─────────────────────────────────────────────────────────────────────────────
-# Daily Rain Prediction — GitHub Actions Workflow
+# .github/workflows/rain_alert.yml
+# ============================================================
+#  Daily Rain Alert — GitHub Actions
+#  Runs every morning at 7:00 AM IST (1:30 AM UTC)
 #
-# WHAT IT DOES:
-#   1. Runs every morning at 7:00 AM IST (1:30 AM UTC)
-#   2. Installs Python (no extra libraries needed — uses only stdlib)
-#   3. Runs predict_rain.py which:
-#        - Trains the model on weather_data.csv
-#        - Fetches live weather from Open-Meteo API
-#        - Predicts rain probability
-#        - Sends the result to Telegram
+#  Secrets needed  (Settings → Secrets → Actions):
+#    TELEGRAM_BOT_TOKEN
+#    TELEGRAM_CHAT_ID
 #
-# SECRETS REQUIRED (Settings → Secrets and variables → Actions → Secrets):
-#   TELEGRAM_BOT_TOKEN   — from @BotFather on Telegram
-#   TELEGRAM_CHAT_ID     — your personal or group chat ID
-#
-# VARIABLES (optional — Settings → Secrets and variables → Actions → Variables):
-#   CITY           — city name to display  (default: Mumbai)
-#   LATITUDE       — city latitude         (default: 19.08)
-#   LONGITUDE      — city longitude        (default: 72.88)
-#   RAIN_THRESHOLD — probability cutoff    (default: 0.50)
-# ─────────────────────────────────────────────────────────────────────────────
+#  Variables needed (Settings → Variables → Actions):
+#    CITY, LATITUDE, LONGITUDE
+# ============================================================
 
-name: 🌧️ Daily Rain Prediction → Telegram
+name: 🌧️ Daily Rain Alert
 
-# ── WHEN to run ───────────────────────────────────────────────────────────────
 on:
-
-  # Every morning at 7:00 AM IST = 1:30 AM UTC
   schedule:
-    - cron: "30 1 * * *"
-
-  # Manually trigger from the Actions tab (great for testing in class)
-  workflow_dispatch:
-
-  # Also runs on every push to main (for testing)
+    - cron: "30 1 * * *"    # 7:00 AM IST every day
+  workflow_dispatch:         # manual trigger from Actions tab
   push:
-    branches:
-      - main
+    branches: [main]         # also runs on every push (for testing)
 
-
-# ── WHAT to do ────────────────────────────────────────────────────────────────
 jobs:
-
-  predict-and-alert:
+  rain-alert:
     runs-on: ubuntu-latest
 
     steps:
 
-      # Step 1: Get the repository code onto GitHub's machine
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v5
+      # 1. Download your repo code onto GitHub's machine
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Step 2: Set up Python
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v6
+      # 2. Install Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Step 3: Generate the dataset if it doesn't already exist
-      - name: 📊 Generate dataset (if not present)
-        run: |
-          if [ ! -f weather_data.csv ]; then
-            echo "weather_data.csv not found — generating..."
-            python generate_dataset.py
-          else
-            echo "weather_data.csv already exists — skipping generation."
-          fi
+      # 3. Install only what the script needs
+      - name: Install libraries
+        run: pip install scikit-learn
 
-      # Step 4: Run the rain prediction and send Telegram message
-      - name: 🌧️ Predict rain and send alert
+      # 4. Run the prediction script
+      #    Secrets and Variables are passed as environment variables
+      - name: Run rain prediction
         run: python predict_rain.py
         env:
-          # Sensitive values — stored as GitHub Secrets
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-
-          # Non-sensitive config — stored as GitHub Variables, with safe fallbacks
-          CITY:               ${{ vars.CITY || 'Kolkata' }}
-          LATITUDE:           ${{ vars.LATITUDE || '19.08' }}
-          LONGITUDE:          ${{ vars.LONGITUDE || '72.88' }}
-          RAIN_THRESHOLD:     ${{ vars.RAIN_THRESHOLD || '0.50' }}
+          CITY:               ${{ vars.CITY }}
+          LATITUDE:           ${{ vars.LATITUDE }}
+          LONGITUDE:          ${{ vars.LONGITUDE }}
