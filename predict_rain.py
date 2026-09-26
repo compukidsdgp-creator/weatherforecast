@@ -123,7 +123,7 @@ probability = model.predict_proba(today_weather)[0]
 rain_chance = round(probability[1] * 100, 1)
 
 if prediction == 1:
-    result = "🌧️ RAIN PREDICTED"
+    result = "🌧️ 😎 RAIN PREDICTED"
     advice = "Carry an umbrella. Avoid outdoor plans if possible."
 else:
     result = "☀️ NO RAIN"
